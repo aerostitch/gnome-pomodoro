@@ -11,20 +11,18 @@ Group: Productivity/Office/Other
 %endif
 
 BuildRequires: gettext
-BuildRequires: intltool
 BuildRequires: vala >= @VALA_REQUIRED@
-BuildRequires: gnome-common
 BuildRequires: desktop-file-utils
 BuildRequires: pkgconfig(glib-2.0) >= @GLIB_REQUIRED@
 BuildRequires: pkgconfig(gio-2.0) >= @GLIB_REQUIRED@
 BuildRequires: pkgconfig(gtk+-3.0) >= @GTK_REQUIRED@
-BuildRequires: pkgconfig(gsettings-desktop-schemas) >= @GTK_REQUIRED@
+BuildRequires: pkgconfig(gsettings-desktop-schemas) >= @GNOME_REQUIRED@
 BuildRequires: pkgconfig(gobject-introspection-1.0) >= @INTROSPECTION_REQUIRED@
 BuildRequires: pkgconfig(libpeas-1.0) >= @LIBPEAS_REQUIRED@
 BuildRequires: pkgconfig(gstreamer-1.0) >= 1.0.10
 BuildRequires: pkgconfig(libcanberra) >= 0.30
-BuildRequires: pkgconfig(gnome-desktop-3.0) >= @GNOME_REQUIRED@
 BuildRequires: pkgconfig(appindicator3-0.1)
+BuildRequires: pkgconfig(appstream-glib)
 
 %if %{defined fedora}
 BuildRequires: vala-tools
@@ -98,7 +96,7 @@ glib-compile-schemas %{_datadir}/glib-2.0/schemas &> /dev/null || :
 %{_datadir}/appdata/org.gnome.Pomodoro.appdata.xml
 %{_datadir}/applications/org.gnome.Pomodoro.desktop
 %{_datadir}/dbus-1/services/org.gnome.Pomodoro.service
-%{_datadir}/glib-2.0/schemas/org.gnome.pomodoro.gschema.xml
+%{_datadir}/glib-2.0/schemas/org.gnome.pomodoro.*
 %{_datadir}/gnome-pomodoro
 %{_datadir}/gnome-shell/extensions/@EXTENSION_UUID@
 %{_datadir}/icons/hicolor/*/apps/*

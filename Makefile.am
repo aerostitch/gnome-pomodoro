@@ -1,12 +1,9 @@
-ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
-
 SUBDIRS = \
 	lib \
 	src \
 	plugins \
 	data \
 	po \
-	man \
 	tests \
 	packages
 
@@ -33,16 +30,13 @@ EXTRA_DIST = \
 	NEWS \
 	README.md
 
-DISTCLEANFILES = \
-	intltool-extract \
-	intltool-merge \
-	intltool-update \
-	po/.intltool-merge-cache
-
 MAINTAINERCLEANFILES = \
 	$(GITIGNORE_MAINTAINERCLEANFILES_TOPLEVEL) \
 	$(GITIGNORE_MAINTAINERCLEANFILES_MAKEFILE_IN) \
 	$(GITIGNORE_MAINTAINERCLEANFILES_M4_LIBTOOL)
+
+# We currently have no custom macros
+GITIGNOREFILES = m4
 
 .PHONY: test packages rpm rpm-src deb-src
 

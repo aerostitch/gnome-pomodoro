@@ -12,13 +12,14 @@ libsounds_la_VALASOURCES = \
 	$(top_builddir)/lib/gnome-pomodoro.vapi
 
 libsounds_la_SOURCES = \
-	$(libsounds_la_VALASOURCES)
+	$(libsounds_la_VALASOURCES) \
+	resources.c
 
 libsounds_la_VALAFLAGS = \
 	$(PLUGIN_VALAFLAGS) \
 	--pkg gstreamer-1.0 \
 	--pkg libcanberra \
-	--gresources "$(top_srcdir)/lib/resources/resources.xml"
+	--gresources resources/resources.xml
 
 libsounds_la_CPPFLAGS = \
 	$(PLUGIN_CPPFLAGS) \
@@ -32,21 +33,39 @@ libsounds_la_CFLAGS = \
 	$(SOUNDS_PLUGIN_CFLAGS)
 
 libsounds_la_LDFLAGS = \
-	$(PLUGIN_LIBS) \
-	$(PLUGIN_LIBTOOL_FLAGS) \
-	$(SOUNDS_PLUGIN_LIBS)
+	$(PLUGIN_LDFLAGS)
 
 libsounds_la_LIBADD = \
+	$(PLUGIN_LIBS) \
+	$(SOUNDS_PLUGIN_LIBS) \
 	$(top_builddir)/lib/libgnome-pomodoro.la
 
+gsettings_SCHEMAS = \
+	org.gnome.pomodoro.plugins.sounds.gschema.xml
+@GSETTINGS_RULES@
+
+resources = \
+	resources/resources.xml
+resources_deps = \
+	$(shell $(GLIB_COMPILE_RESOURCES) --generate-dependencies --sourcedir=resources $(resources))
+
+resources.c: $(resources) $(resources_deps)
+	$(AM_V_GEN) $(GLIB_COMPILE_RESOURCES) --generate-source --c-name="pomodoro" --sourcedir=resources --target=$@ $<
+
+BUILT_SOURCES = \
+	resources.c
 
 CLEANFILES = \
+	$(BUILT_SOURCES) \
 	$(libsounds_la_SOURCES:.vala=.c) \
 	libsounds.la \
 	libsounds_la_vala.stamp
 
 EXTRA_DIST = \
-	$(libsounds_la_plugindata_DATA)
+	$(gsettings_SCHEMAS) \
+	$(libsounds_la_plugindata_DATA) \
+	$(resources) \
+	$(resources_deps)
 
 -include $(top_srcdir)/git.mk
 

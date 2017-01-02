@@ -73,8 +73,8 @@ namespace Pomodoro
         }
     }
 
-    private static void list_box_separator_func (Gtk.ListBoxRow  row,
-                                                 Gtk.ListBoxRow? before)
+    private void list_box_separator_func (Gtk.ListBoxRow  row,
+                                          Gtk.ListBoxRow? before)
     {
         if (before != null) {
             var header = row.get_header ();
@@ -103,7 +103,7 @@ namespace Pomodoro
         }
     }
 
-    [GtkTemplate (ui = "/org/gnome/pomodoro/ui/preferences-keyboard-shortcut-page.ui")]
+    [GtkTemplate (ui = "/org/gnome/pomodoro/preferences-keyboard-shortcut-page.ui")]
     public class PreferencesKeyboardShortcutPage : Gtk.Box, Gtk.Buildable, Pomodoro.PreferencesPage
     {
         private Pomodoro.Accelerator accelerator { get; set; }
@@ -322,7 +322,7 @@ namespace Pomodoro
         }
     }
 
-    [GtkTemplate (ui = "/org/gnome/pomodoro/ui/preferences-plugins-page.ui")]
+    [GtkTemplate (ui = "/org/gnome/pomodoro/preferences-plugins-page.ui")]
     public class PreferencesPluginsPage : Gtk.ScrolledWindow, Gtk.Buildable, Pomodoro.PreferencesPage
     {
         [GtkChild]
@@ -336,10 +336,9 @@ namespace Pomodoro
         {
             this.settings = Pomodoro.get_settings ()
                                     .get_child ("preferences");
+            this.settings.changed["enabled-plugins"].connect (this.on_settings_changed);
 
             this.engine = Peas.Engine.get_default ();
-            this.engine.load_plugin.connect (this.on_engine_load_plugin);
-            this.engine.unload_plugin.connect (this.on_engine_unload_plugin);
 
             this.plugins_listbox.set_header_func (Pomodoro.list_box_separator_func);
             this.plugins_listbox.set_sort_func (list_box_sort_func);
@@ -358,22 +357,38 @@ namespace Pomodoro
             return GLib.strcmp (name1, name2);
         }
 
-        private void on_engine_load_plugin (Peas.PluginInfo plugin_info)
+        private void on_settings_changed (GLib.Settings settings,
+                                          string        key)
         {
-            var toggle = this.toggles.lookup (plugin_info.get_module_name ());
+            foreach (var plugin_info in this.engine.get_plugin_list ())
+            {
+                var toggle  = this.toggles.lookup (plugin_info.get_module_name ());
+                var enabled = false;
 
-            if (toggle != null) {
-                toggle.state = true;
+                if (toggle != null) {
+                    enabled = this.get_plugin_enabled (plugin_info.get_module_name ());
+
+                    if (toggle.state != enabled) {
+                        toggle.state = enabled;
+                    }
+                }
             }
         }
 
-        private void on_engine_unload_plugin (Peas.PluginInfo plugin_info)
+        private bool get_plugin_enabled (string name)
         {
-            var toggle = this.toggles.lookup (plugin_info.get_module_name ());
+            var enabled_plugins = this.settings.get_strv ("enabled-plugins");
+            var enabled_in_settings = false;
 
-            if (toggle != null) {
-                toggle.state = false;
+            foreach (var plugin_name in enabled_plugins) {
+                if (plugin_name == name) {
+                    enabled_in_settings = true;
+
+                    break;
+                }
             }
+
+            return enabled_in_settings;
         }
 
         private void set_plugin_enabled (string name,
@@ -461,7 +476,7 @@ namespace Pomodoro
         }
     }
 
-    [GtkTemplate (ui = "/org/gnome/pomodoro/ui/preferences-main-page.ui")]
+    [GtkTemplate (ui = "/org/gnome/pomodoro/preferences-main-page.ui")]
     public class PreferencesMainPage : Gtk.ScrolledWindow, Gtk.Buildable, Pomodoro.PreferencesPage
     {
         [GtkChild]
@@ -471,17 +486,18 @@ namespace Pomodoro
         [GtkChild]
         public Gtk.ListBox notifications_listbox;
         [GtkChild]
-        public Gtk.ListBox other_listbox;
+        public Gtk.ListBox desktop_listbox;
+        [GtkChild]
+        public Gtk.ListBox plugins_listbox;
         [GtkChild]
         public Gtk.SizeGroup lisboxrow_sizegroup;
+
         [GtkChild]
-        public Gtk.ListBoxRow listboxrow_accelerator;
+        private Gtk.ListBoxRow listboxrow_accelerator;
         [GtkChild]
-        public Gtk.ListBoxRow listboxrow_reminders;
+        private Gtk.ListBoxRow listboxrow_reminders;
         [GtkChild]
-        public Gtk.ListBoxRow listboxrow_idle_monitor;
-        [GtkChild]
-        public Gtk.ListBoxRow listboxrow_hide_system_notifications;
+        private Gtk.ListBoxRow listboxrow_idle_monitor;
 
         private GLib.Settings settings;
         private Pomodoro.Accelerator accelerator;
@@ -490,13 +506,17 @@ namespace Pomodoro
         {
             this.timer_listbox.set_header_func (Pomodoro.list_box_separator_func);
             this.notifications_listbox.set_header_func (Pomodoro.list_box_separator_func);
-            this.other_listbox.set_header_func (Pomodoro.list_box_separator_func);
+            this.desktop_listbox.set_header_func (Pomodoro.list_box_separator_func);
+            this.plugins_listbox.set_header_func (Pomodoro.list_box_separator_func);
 
             var application = Pomodoro.Application.get_default ();
             application.capabilities.capability_enabled.connect (this.on_capability_enabled);
             application.capabilities.capability_disabled.connect (this.on_capability_disabled);
 
             this.update_capabilities ();
+
+            /* hide frame if empty */
+            this.setup_listbox (this.desktop_listbox);
         }
 
         private unowned Widgets.LogScale setup_time_scale (Gtk.Builder builder,
@@ -530,23 +550,24 @@ namespace Pomodoro
 
         private void setup_timer_section (Gtk.Builder builder)
         {
-            var pomodoro_scale = this.setup_time_scale (builder,
-                                                        "pomodoro_grid",
-                                                        "pomodoro_label");
-            var short_break_scale = this.setup_time_scale (builder,
-                                                           "short_break_grid",
-                                                           "short_break_label");
-            var long_break_scale = this.setup_time_scale (builder,
-                                                          "long_break_grid",
-                                                          "long_break_label");
-            var long_break_interval_spinbutton = builder.get_object ("long_break_interval_spinbutton")
-                                                                     as Gtk.SpinButton;
-            var accelerator_label = builder.get_object ("accelerator_label")
-                                                        as Gtk.Label;
-            var pause_when_idle_toggle = builder.get_object ("pause_when_idle_toggle")
-                                                             as Gtk.Switch;
-            var disable_other_notifications_toggle = builder.get_object ("disable_other_notifications_toggle")
-                                                                         as Gtk.Switch;
+            var pomodoro_scale = this.setup_time_scale
+                                       (builder,
+                                        "pomodoro_grid",
+                                        "pomodoro_label");
+            var short_break_scale = this.setup_time_scale
+                                       (builder,
+                                        "short_break_grid",
+                                        "short_break_label");
+            var long_break_scale = this.setup_time_scale
+                                       (builder,
+                                        "long_break_grid",
+                                        "long_break_label");
+            var long_break_interval_spinbutton = builder.get_object
+                                       ("long_break_interval_spinbutton")
+                                       as Gtk.SpinButton;
+            var accelerator_label = builder.get_object
+                                       ("accelerator_label")
+                                       as Gtk.Label;
 
             this.settings.bind ("pomodoro-duration",
                                 pomodoro_scale.base_adjustment,
@@ -564,28 +585,21 @@ namespace Pomodoro
                                 long_break_interval_spinbutton.adjustment,
                                 "value",
                                 GLib.SettingsBindFlags.DEFAULT);
-            this.settings.bind ("pause-when-idle",
-                                pause_when_idle_toggle,
-                                "active",
-                                GLib.SettingsBindFlags.DEFAULT);
-            this.settings.bind ("hide-notifications-during-pomodoro",
-                                disable_other_notifications_toggle,
-                                "active",
-                                GLib.SettingsBindFlags.DEFAULT);
 
             this.accelerator = new Pomodoro.Accelerator ();
             this.accelerator.changed.connect(() => {
                 accelerator_label.label = this.accelerator.display_name != ""
                         ? this.accelerator.display_name : _("Off");
             });
-            this.settings.bind_with_mapping ("toggle-timer-key",
-                                             this.accelerator,
-                                             "name",
-                                             GLib.SettingsBindFlags.DEFAULT,
-                                             (GLib.SettingsBindGetMappingShared) get_accelerator_mapping,
-                                             (GLib.SettingsBindSetMappingShared) set_accelerator_mapping,
-                                             null,
-                                             null);
+            this.settings.bind_with_mapping
+                                       ("toggle-timer-key",
+                                        this.accelerator,
+                                        "name",
+                                        GLib.SettingsBindFlags.DEFAULT,
+                                        (GLib.SettingsBindGetMappingShared) get_accelerator_mapping,
+                                        (GLib.SettingsBindSetMappingShared) set_accelerator_mapping,
+                                        null,
+                                        null);
         }
 
         private void setup_notifications_section (Gtk.Builder builder)
@@ -603,6 +617,17 @@ namespace Pomodoro
 
         private void setup_other_section (Gtk.Builder builder)
         {
+            var pause_when_idle_toggle = builder.get_object ("pause_when_idle_toggle")
+                                                             as Gtk.Switch;
+
+            this.settings.bind ("pause-when-idle",
+                                pause_when_idle_toggle,
+                                "active",
+                                GLib.SettingsBindFlags.DEFAULT);
+        }
+
+        private void setup_plugins_section (Gtk.Builder builder)
+        {
         }
 
         private void parser_finished (Gtk.Builder builder)
@@ -615,6 +640,7 @@ namespace Pomodoro
             this.setup_timer_section (builder);
             this.setup_notifications_section (builder);
             this.setup_other_section (builder);
+            this.setup_plugins_section (builder);
         }
 
         [GtkCallback]
@@ -646,7 +672,6 @@ namespace Pomodoro
             this.listboxrow_accelerator.visible = capabilities.has_enabled ("accelerator");
             this.listboxrow_reminders.visible = capabilities.has_enabled ("reminders");
             this.listboxrow_idle_monitor.visible = capabilities.has_enabled ("idle-monitor");
-            this.listboxrow_hide_system_notifications.visible = capabilities.has_enabled ("hide-system-notifications");
         }
 
         private void on_capability_enabled (string capability_name)
@@ -659,6 +684,66 @@ namespace Pomodoro
             this.update_capabilities ();
         }
 
+        private void setup_listbox (Gtk.ListBox listbox)
+        {
+            listbox.@foreach ((child) => {
+                this.on_listbox_add (listbox as Gtk.Widget, child);
+            });
+
+            listbox.add.connect_after (this.on_listbox_add);
+            listbox.remove.connect_after (this.on_listbox_remove);
+        }
+
+        private void on_listboxrow_visible_notify (GLib.Object    object,
+                                                   GLib.ParamSpec pspec)
+        {
+            var widget = (object as Gtk.Widget).parent;
+            var listbox = widget as Gtk.ListBox;
+            var visible = false;
+
+            if (widget.parent != null)
+            {
+                listbox.@foreach ((child) => {
+                    visible |= child.visible;
+                });
+
+                if (widget.parent.visible != visible) {
+                    widget.parent.visible = visible;
+                }
+            }
+        }
+
+        /* Note that the "add" signal is not emmited when calling insert() */
+        private void on_listbox_add (Gtk.Widget widget,
+                                     Gtk.Widget child)
+        {
+            child.notify["visible"].connect (this.on_listboxrow_visible_notify);
+
+            if (widget.parent != null && !widget.parent.visible && child.visible) {
+                widget.parent.visible = true;
+            }
+        }
+
+        private void on_listbox_remove (Gtk.Widget widget,
+                                        Gtk.Widget child)
+        {
+            child.notify["visible"].disconnect (this.on_listboxrow_visible_notify);
+
+            if (widget.parent != null)
+            {
+                var listbox = widget as Gtk.ListBox;
+                var visible = false;
+
+                listbox.@foreach ((child) => {
+                    visible |= child.visible;
+                });
+
+                if (widget.parent.visible != visible) {
+                    widget.parent.visible = visible;
+                }
+            }
+        }
+
         public override void dispose ()
         {
             var application = Pomodoro.Application.get_default ();
@@ -669,17 +754,17 @@ namespace Pomodoro
         }
     }
 
-    [GtkTemplate (ui = "/org/gnome/pomodoro/ui/preferences.ui")]
+    [GtkTemplate (ui = "/org/gnome/pomodoro/preferences.ui")]
     public class PreferencesDialog : Gtk.ApplicationWindow, Gtk.Buildable
     {
-        private static const int FIXED_WIDTH = 600;
-        private static const int FIXED_HEIGHT = 720;
+        private const int FIXED_WIDTH = 600;
+        private const int FIXED_HEIGHT = 720;
 
-        private static unowned Pomodoro.PreferencesDialog instance;
-
-        private static const GLib.ActionEntry[] action_entries = {
+        private const GLib.ActionEntry[] ACTION_ENTRIES = {
             { "back", on_back_activate }
         };
+
+        private static unowned Pomodoro.PreferencesDialog instance;
 
         [GtkChild]
         private Gtk.HeaderBar header_bar;
@@ -729,7 +814,7 @@ namespace Pomodoro
                           _("Keyboard Shortcut"),
                           typeof (Pomodoro.PreferencesKeyboardShortcutPage));
 
-            this.add_action_entries (PreferencesDialog.action_entries, this);
+            this.add_action_entries (PreferencesDialog.ACTION_ENTRIES, this);
 
             this.history_clear ();
 
@@ -759,7 +844,7 @@ namespace Pomodoro
             base.parser_finished (builder);
         }
 
-        public virtual signal void page_changed (Pomodoro.PreferencesPage page)
+        private void on_page_notify (Pomodoro.PreferencesPage page)
         {
             string name;
             string title;
@@ -789,7 +874,7 @@ namespace Pomodoro
 
             var page = this.stack.visible_child as Pomodoro.PreferencesPage;
 
-            this.page_changed (page);
+            this.on_page_notify (page);
 
             /* calculate window size */
             this.header_bar.get_preferred_height (null,
@@ -906,14 +991,17 @@ namespace Pomodoro
 
         public void remove_page (string name)
         {
-            var child = this.stack.get_child_by_name (name);
+            if (this.stack != null)
+            {
+                var child = this.stack.get_child_by_name (name);
 
-            if (this.stack.get_visible_child_name () == name) {
-                this.set_page ("main");
-            }
+                if (this.stack.get_visible_child_name () == name) {
+                    this.set_page ("main");
+                }
 
-            if (child != null) {
-                this.stack.remove (child);
+                if (child != null) {
+                    this.stack.remove (child);
+                }
             }
 
             this.pages.remove (name);

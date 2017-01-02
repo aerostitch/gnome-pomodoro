@@ -2,19 +2,16 @@ SUBDIRS = \
 	icons \
 	sounds
 
-#BUILT_SOURCES = \
-#	gschemas.compiled
-
-@INTLTOOL_DESKTOP_RULE@
 desktopdir = $(datadir)/applications
 desktop_in_files = org.gnome.Pomodoro.desktop.in
 desktop_DATA = $(desktop_in_files:.desktop.in=.desktop)
 
+$(desktop_DATA): $(desktop_in_files)
+	$(AM_V_GEN) $(MSGFMT) --desktop -d $(top_srcdir)/po --template $< -o $@
+
+gsettings_SCHEMAS = \
+	org.gnome.pomodoro.gschema.xml
 @GSETTINGS_RULES@
-@INTLTOOL_XML_NOMERGE_RULE@
-gsettings_in_files = org.gnome.pomodoro.gschema.xml.in
-gsettings_SCHEMAS = $(gsettings_in_files:.xml.in=.xml)
-.PRECIOUS: $(gsettings_SCHEMAS)
 
 servicedir = $(datadir)/dbus-1/services
 service_in_files = \
@@ -24,35 +21,33 @@ service_DATA = $(service_in_files:.service.in=.service)
 $(service_DATA): $(service_in_files)
 	$(AM_V_GEN) sed -e "s|@bindir[@]|$(bindir)|g" $< > $@
 
-appdatadir = $(datadir)/appdata
-appdata_in_files = \
+appstream_in_files = \
 	org.gnome.Pomodoro.appdata.xml.in
-appdata_DATA = org.gnome.Pomodoro.appdata.xml
+appstream_XML = $(appstream_in_files:.xml.in=.xml)
+@APPSTREAM_XML_RULES@
 
-# We need to compile schemas at make time
-# to run from source tree
-#gschemas.compiled: $(gsettings_SCHEMAS)
-#	$(AM_V_GEN) $(GLIB_COMPILE_SCHEMAS) \
-#		$(addprefix --schema-file=,$(GTK_GSETTINGS_SCHEMAS)) \
-#		--targetdir=$(builddir)
+$(appstream_XML): $(appstream_in_files)
+	$(AM_V_GEN) $(MSGFMT) --xml -d $(top_srcdir)/po --template $< -o $@
 
 EXTRA_DIST = \
-	$(appdata_in_files) \
+	$(appstream_in_files) \
 	$(desktop_in_files) \
-	$(gsettings_in_files) \
-	$(service_in_files)
+	$(service_in_files) \
+	$(gsettings_SCHEMAS)
 
 CLEANFILES = \
-	$(appdata_DATA) \
+	$(appstream_XML) \
 	$(desktop_DATA) \
-	$(gsettings_SCHEMAS) \
 	$(service_DATA)
-#	gschemas.compiled
+
+AM_DISTCHECK_CONFIGURE_FLAGS = \
+	--enable-appdata-check
+
+check-local: $(desktop_DATA)
+	$(DESKTOP_FILE_VALIDATE) $(desktop_DATA)
 
 dist-hook:
 	cd $(distdir) && rm -f $(CLEANFILES)
-
-# all-local: gschemas.compiled
 
 -include $(top_srcdir)/git.mk
 

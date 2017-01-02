@@ -2,13 +2,13 @@ lib_LTLIBRARIES = \
 	libgnome-pomodoro.la
 
 libgnome_pomodoro_la_VALASOURCES = \
-	animation.vala \
 	about-dialog.vala \
 	accelerator.vala \
+	animation.vala \
 	application.vala \
-	capability.vala \
 	capability-group.vala \
 	capability-manager.vala \
+	capability.vala \
 	log-scale.vala \
 	notifications-capability.vala \
 	preferences-dialog.vala \
@@ -31,7 +31,7 @@ libgnome_pomodoro_la_VALAFLAGS = \
 	--library=gnome-pomodoro \
 	--header=gnome-pomodoro.h \
 	--vapi=gnome-pomodoro.vapi \
-	--gresources resources/resources.xml
+	--gresources ../data/resources/resources.xml
 
 libgnome_pomodoro_la_CPPFLAGS = \
 	$(GNOME_POMODORO_CPPFLAGS) \
@@ -40,19 +40,18 @@ libgnome_pomodoro_la_CPPFLAGS = \
 	-DPACKAGE_DATA_DIR=\""$(pkgdatadir)"\"
 
 libgnome_pomodoro_la_CFLAGS = \
-	$(GNOME_POMODORO_CFLAGS) \
-	$(WARNING_CFLAGS)
+	$(GNOME_POMODORO_CFLAGS)
 
 libgnome_pomodoro_la_LIBADD = \
 	$(GNOME_POMODORO_LIBS)
 
 resources = \
-	resources/resources.xml
+	../data/resources/resources.xml
 resources_deps = \
-	$(shell $(GLIB_COMPILE_RESOURCES) --generate-dependencies --sourcedir=resources $(resources))
+	$(shell $(GLIB_COMPILE_RESOURCES) --generate-dependencies --sourcedir=../data/resources $(resources))
 
 resources.c: $(resources) $(resources_deps)
-	$(AM_V_GEN) $(GLIB_COMPILE_RESOURCES) --generate-source --c-name="pomodoro" --sourcedir=resources --target=$@ $<
+	$(AM_V_GEN) $(GLIB_COMPILE_RESOURCES) --generate-source --c-name="pomodoro" --sourcedir=../data/resources --target=$@ $<
 
 BUILT_SOURCES = \
 	resources.c

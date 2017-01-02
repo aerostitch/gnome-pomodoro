@@ -61,7 +61,7 @@ namespace Pomodoro
 
             public static ExitStatus exit_status = ExitStatus.UNDEFINED;
 
-            public static const GLib.OptionEntry[] entries = {
+            public const GLib.OptionEntry[] ENTRIES = {
                 { "start-stop", 0, 0, GLib.OptionArg.NONE,
                   ref start_stop, N_("Start/Stop"), null },
 
@@ -80,7 +80,7 @@ namespace Pomodoro
                 { "resume", 0, 0, GLib.OptionArg.NONE,
                   ref resume, N_("Resume"), null },
 
-                { "no-default-window", 0, GLib.OptionFlags.HIDDEN, GLib.OptionArg.NONE,
+                { "no-default-window", 0, 0, GLib.OptionArg.NONE,
                   ref no_default_window, N_("Run as background service"), null },
 
                 { "preferences", 0, 0, GLib.OptionArg.NONE,
@@ -137,7 +137,7 @@ namespace Pomodoro
         private void setup_resources ()
         {
             var css_provider = new Gtk.CssProvider ();
-            css_provider.load_from_resource ("/org/gnome/pomodoro/ui/style.css");
+            css_provider.load_from_resource ("/org/gnome/pomodoro/style.css");
 
             Gtk.StyleContext.add_provider_for_screen (
                                          Gdk.Screen.get_default (),
@@ -145,14 +145,42 @@ namespace Pomodoro
                                          Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
         }
 
-        private void setup_plugins ()
+        private async void setup_plugins ()
         {
             var engine = Peas.Engine.get_default ();
             engine.add_search_path (Config.PLUGIN_LIB_DIR, Config.PLUGIN_DATA_DIR);
 
-            this.load_plugins ();
+            var wait_count = 0;
 
             this.extensions = new Peas.ExtensionSet (engine, typeof (Pomodoro.ApplicationExtension));
+            this.extensions.extension_added.connect ((extension_set,
+                                                      info,
+                                                      extension) => {
+                if (extension is GLib.AsyncInitable) {
+                    var async_initable = extension as GLib.AsyncInitable;
+
+                    async_initable.init_async.begin (GLib.Priority.DEFAULT, null, (obj, res) => {
+                        try {
+                            async_initable.init_async.end (res);
+                        }
+                        catch (GLib.Error error) {
+                            GLib.warning ("Error while initializing extension %s: %s", info.get_module_name (), error.message);
+                        }
+
+                        wait_count--;
+
+                        this.setup_plugins.callback ();
+                    });
+
+                    wait_count++;
+                }
+		    });
+
+            this.load_plugins ();
+
+            while (wait_count > 0) {
+                yield;
+            }
         }
 
         private void setup_capabilities ()
@@ -372,7 +400,7 @@ namespace Pomodoro
         {
             var builder = new Gtk.Builder ();
             try {
-                builder.add_from_resource ("/org/gnome/pomodoro/ui/menus.ui");
+                builder.add_from_resource ("/org/gnome/pomodoro/menus.ui");
 
                 var menu = builder.get_object ("app-menu") as GLib.MenuModel;
                 this.set_app_menu (menu);
@@ -408,17 +436,19 @@ namespace Pomodoro
             this.setup_actions ();
             this.setup_menu ();
             this.setup_capabilities ();
-            this.setup_plugins ();
+            this.setup_plugins.begin ((obj, res) => {
+                this.setup_plugins.end (res);
 
-            // FIXME: shouldn't these be enabled by settings?!
-            this.capabilities.enable ("notifications");
-            this.capabilities.enable ("indicator");
-            this.capabilities.enable ("accelerator");
-            this.capabilities.enable ("reminders");
-            this.capabilities.enable ("hide-system-notifications");
-            this.capabilities.enable ("idle-monitor");
+                // FIXME: shouldn't these be enabled by settings?!
+                this.capabilities.enable ("notifications");
+                this.capabilities.enable ("indicator");
+                this.capabilities.enable ("accelerator");
+                this.capabilities.enable ("reminders");
+                this.capabilities.enable ("hide-system-notifications");
+                this.capabilities.enable ("idle-monitor");
 
-            this.release ();
+                this.release ();
+            });
         }
 
         /**
@@ -427,7 +457,7 @@ namespace Pomodoro
         private void parse_command_line (ref unowned string[] arguments) throws GLib.OptionError
         {
             var option_context = new GLib.OptionContext ();
-            option_context.add_main_entries (Options.entries, Config.GETTEXT_PACKAGE);
+            option_context.add_main_entries (Options.ENTRIES, Config.GETTEXT_PACKAGE);
             option_context.add_group (Gtk.get_option_group (true));
 
             // TODO: add options from plugins
@@ -505,7 +535,25 @@ namespace Pomodoro
          */
         public override void shutdown ()
         {
+            this.hold ();
+
+            this.save_timer ();
+
+            foreach (var window in this.get_windows ()) {
+                this.remove_window (window);
+            }
+
+            this.capabilities.disable_all ();
+
+            var engine = Peas.Engine.get_default ();
+
+            foreach (var plugin_info in engine.get_plugin_list ()) {
+                engine.try_unload_plugin (plugin_info);
+            }
+
             base.shutdown ();
+
+            this.release ();
         }
 
         /* Emitted on the primary instance when an activation occurs.
@@ -577,6 +625,7 @@ namespace Pomodoro
 
             if (this.timer == null) {
                 this.timer = Pomodoro.Timer.get_default ();
+                this.timer.notify["is-paused"].connect (this.on_timer_is_paused_notify);
                 this.timer.state_changed.connect_after (this.on_timer_state_changed);
             }
 
@@ -625,12 +674,18 @@ namespace Pomodoro
 
         private void save_timer ()
         {
-            Pomodoro.save_timer (this.timer);
+            var state_settings = Pomodoro.get_settings ()
+                                         .get_child ("state");
+
+            this.timer.save (state_settings);
         }
 
         private void restore_timer ()
         {
-            Pomodoro.restore_timer (this.timer);
+            var state_settings = Pomodoro.get_settings ()
+                                         .get_child ("state");
+
+            this.timer.restore (state_settings);
         }
 
         private void on_settings_changed (GLib.Settings settings,
@@ -668,6 +723,11 @@ namespace Pomodoro
             {
                 this.timer.state_duration = double.max (state_duration, this.timer.elapsed);
             }
+        }
+
+        private void on_timer_is_paused_notify ()
+        {
+            this.save_timer ();
         }
 
         /**

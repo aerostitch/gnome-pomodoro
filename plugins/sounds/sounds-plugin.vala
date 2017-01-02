@@ -53,7 +53,7 @@ namespace SoundsPlugin
         }
     }
 
-    [GtkTemplate (ui = "/org/gnome/pomodoro/ui/preferences-sound-page.ui")]
+    [GtkTemplate (ui = "/org/gnome/pomodoro/plugins/sounds/preferences-sound-page.ui")]
     public abstract class PreferencesSoundPage : Gtk.Box, Pomodoro.PreferencesPage
     {
         public double volume { get; set; }
@@ -85,7 +85,8 @@ namespace SoundsPlugin
 
         protected SoundPlayer player;
 
-        private static const Gtk.TargetEntry[] target_entries = {};
+        private const Gtk.TargetEntry[] TARGET_ENTRIES = {
+        };
 
         private static string file_chooser_current_folder_uri;
         private static string file_chooser_current_file_uri;
@@ -118,13 +119,13 @@ namespace SoundsPlugin
             this.notify["uri"].connect (this.on_uri_notify);
 
             /* Drag and drop */
-            var target_list = new Gtk.TargetList (PreferencesSoundPage.target_entries);
+            var target_list = new Gtk.TargetList (PreferencesSoundPage.TARGET_ENTRIES);
             target_list.add_uri_targets (TargetType.TEXT_URI_LIST);
             target_list.add_text_targets (TargetType.TEXT_PLAIN);
 
             Gtk.drag_dest_set (this.chooser_listbox,
                                Gtk.DestDefaults.ALL,
-                               PreferencesSoundPage.target_entries,
+                               PreferencesSoundPage.TARGET_ENTRIES,
                                Gdk.DragAction.COPY);
             Gtk.drag_dest_set_target_list (this.chooser_listbox, target_list);
         }
@@ -398,7 +399,7 @@ namespace SoundsPlugin
      */
     public class PreferencesTickingSoundPage : PreferencesSoundPage
     {
-        private static const Preset[] presets = {
+        private const Preset[] PRESETS = {
             { "clock.ogg", N_("Clock Ticking") },
             { "timer.ogg", N_("Timer Ticking") },
             { "birds.ogg", N_("Woodland Birds") }
@@ -410,8 +411,7 @@ namespace SoundsPlugin
         {
             this.default_uri = "clock.ogg";
 
-            this.settings = Pomodoro.get_settings ()
-                                    .get_child ("preferences");
+            this.settings = new GLib.Settings ("org.gnome.pomodoro.plugins.sounds");
 
             this.settings.bind ("ticking-sound",
                                 this,
@@ -423,7 +423,7 @@ namespace SoundsPlugin
                                 "volume",
                                 GLib.SettingsBindFlags.DEFAULT);
 
-            this.add_presets (presets);
+            this.add_presets (PRESETS);
         }
 
         protected override void setup_player ()
@@ -442,7 +442,7 @@ namespace SoundsPlugin
         public override void map ()
         {
             var application_extension = SoundsPlugin.ApplicationExtension.instance;
-            application_extension.inhibit_ticking_sound ();
+            application_extension.sound_manager.inhibit_ticking_sound ();
 
             base.map ();
         }
@@ -450,7 +450,10 @@ namespace SoundsPlugin
         public override void unmap ()
         {
             var application_extension = SoundsPlugin.ApplicationExtension.instance;
-            application_extension.uninhibit_ticking_sound ();
+
+            if (application_extension != null && application_extension.sound_manager != null) {
+                application_extension.sound_manager.uninhibit_ticking_sound ();
+            }
 
             base.unmap ();
         }
@@ -458,7 +461,7 @@ namespace SoundsPlugin
 
     public class PreferencesPomodoroEndSoundPage : PreferencesSoundPage
     {
-        private static const Preset[] presets = {
+        private const Preset[] PRESETS = {
             { "bell.ogg", N_("Bell") },
             { "loud-bell.ogg", N_("Loud Bell") }
         };
@@ -469,8 +472,7 @@ namespace SoundsPlugin
         {
             this.default_uri = "bell.ogg";
 
-            this.settings = Pomodoro.get_settings ()
-                                    .get_child ("preferences");
+            this.settings = new GLib.Settings ("org.gnome.pomodoro.plugins.sounds");
 
             this.settings.bind ("pomodoro-end-sound",
                                 this,
@@ -482,13 +484,13 @@ namespace SoundsPlugin
                                 "volume",
                                 GLib.SettingsBindFlags.DEFAULT);
 
-            this.add_presets (presets);
+            this.add_presets (PRESETS);
         }
 
         protected override void setup_player ()
         {
             try {
-                this.player = new SoundsPlugin.CanberraPlayer ();
+                this.player = new SoundsPlugin.CanberraPlayer (null);
             }
             catch (SoundsPlugin.SoundPlayerError error) {
                 GLib.critical ("Failed to setup sound player");
@@ -498,7 +500,7 @@ namespace SoundsPlugin
 
     public class PreferencesPomodoroStartSoundPage : PreferencesSoundPage
     {
-        private static const Preset[] presets = {
+        private const Preset[] PRESETS = {
             { "bell.ogg", N_("Bell") },
             { "loud-bell.ogg", N_("Loud Bell") }
         };
@@ -509,8 +511,7 @@ namespace SoundsPlugin
         {
             this.default_uri = "loud-bell.ogg";
 
-            this.settings = Pomodoro.get_settings ()
-                                    .get_child ("preferences");
+            this.settings = new GLib.Settings ("org.gnome.pomodoro.plugins.sounds");
 
             this.settings.bind ("pomodoro-start-sound",
                                 this,
@@ -522,13 +523,13 @@ namespace SoundsPlugin
                                 "volume",
                                 GLib.SettingsBindFlags.DEFAULT);
 
-            this.add_presets (presets);
+            this.add_presets (PRESETS);
         }
 
         protected override void setup_player ()
         {
             try {
-                this.player = new SoundsPlugin.CanberraPlayer ();
+                this.player = new SoundsPlugin.CanberraPlayer (null);
             }
             catch (SoundsPlugin.SoundPlayerError error) {
                 GLib.critical ("Failed to setup sound player");
@@ -538,7 +539,7 @@ namespace SoundsPlugin
 
     public class PreferencesDialogExtension : Peas.ExtensionBase, Pomodoro.PreferencesDialogExtension
     {
-        private static const string[] volume_icons = {
+        private const string[] VOLUME_ICONS = {
             "audio-volume-muted-symbolic",
             "audio-volume-high-symbolic",
             "audio-volume-low-symbolic",
@@ -548,12 +549,11 @@ namespace SoundsPlugin
         private Pomodoro.PreferencesDialog dialog;
 
         private GLib.Settings settings;
-        private GLib.List<Gtk.ListBoxRow> rows;
+        private GLib.List<unowned Gtk.ListBoxRow> rows;
 
         construct
         {
-            this.settings = Pomodoro.get_settings ()
-                                    .get_child ("preferences");
+            this.settings = new GLib.Settings ("org.gnome.pomodoro.plugins.sounds");
 
             this.dialog = Pomodoro.PreferencesDialog.get_default ();
 
@@ -574,17 +574,19 @@ namespace SoundsPlugin
 
         ~PreferencesDialogExtension ()
         {
-            if (this.dialog != null) {
-                this.dialog.remove_page ("ticking-sound");
-                this.dialog.remove_page ("end-of-break-sound");
-                this.dialog.remove_page ("start-of-break-sound");
-            }
+            var main_page = this.dialog.get_page ("main") as Pomodoro.PreferencesMainPage;
+            main_page.timer_listbox.row_activated.disconnect (this.on_row_activated);
+            main_page.notifications_listbox.row_activated.disconnect (this.on_row_activated);
 
             foreach (var row in this.rows) {
                 row.destroy ();
             }
 
-            this.rows = null;
+            if (this.dialog != null) {
+                this.dialog.remove_page ("ticking-sound");
+                this.dialog.remove_page ("end-of-break-sound");
+                this.dialog.remove_page ("start-of-break-sound");
+            }
         }
 
         private static bool settings_sound_label_getter (GLib.Value   value,
@@ -624,14 +626,14 @@ namespace SoundsPlugin
                                                          void*        user_data)
         {
             var volume = variant.get_double ();
-            var num_icons = volume_icons.length;
+            var num_icons = VOLUME_ICONS.length;
             string icon_name;
 
             if (volume == 0.0) {
-                icon_name = volume_icons[0];
+                icon_name = VOLUME_ICONS[0];
             }
             else if (volume == 1.0) {
-                icon_name = volume_icons[1];
+                icon_name = VOLUME_ICONS[1];
             }
             else {
                 var step = (1.0 - 0.0) / (num_icons - 2);
@@ -639,12 +641,19 @@ namespace SoundsPlugin
 
                 assert (i < num_icons);
 
-                icon_name = volume_icons[i];
+                icon_name = VOLUME_ICONS[i];
             }
 
             value.set_string (icon_name);
 
             return true;
+        }
+
+        private static bool settings_dummy_setter (GLib.Value   value,
+                                                   GLib.Variant variant,
+                                                   void*        user_data)
+        {
+            return false;
         }
 
         private Gtk.ListBoxRow create_row (string label,
@@ -682,7 +691,7 @@ namespace SoundsPlugin
                                              "label",
                                              GLib.SettingsBindFlags.GET,
                                              (GLib.SettingsBindGetMappingShared) settings_sound_label_getter,
-                                             null,
+                                             (GLib.SettingsBindSetMappingShared) settings_dummy_setter,
                                              null,
                                              null);
 
@@ -691,7 +700,7 @@ namespace SoundsPlugin
                                              "visible",
                                              GLib.SettingsBindFlags.GET,
                                              (GLib.SettingsBindGetMappingShared) settings_sound_toggled_getter,
-                                             null,
+                                             (GLib.SettingsBindSetMappingShared) settings_dummy_setter,
                                              null,
                                              null);
 
@@ -700,7 +709,7 @@ namespace SoundsPlugin
                                              "icon-name",
                                              GLib.SettingsBindFlags.GET,
                                              (GLib.SettingsBindGetMappingShared) settings_volume_icon_getter,
-                                             null,
+                                             (GLib.SettingsBindSetMappingShared) settings_dummy_setter,
                                              null,
                                              null);
 
@@ -761,30 +770,23 @@ namespace SoundsPlugin
         }
     }
 
-    public class ApplicationExtension : Peas.ExtensionBase, Pomodoro.ApplicationExtension
-    {
-        public static unowned ApplicationExtension instance;
 
+    public class SoundManager : GLib.Object
+    {
         public SoundPlayer ticking_sound { get; private set; }
         public SoundPlayer pomodoro_start_sound { get; private set; }
         public SoundPlayer pomodoro_end_sound { get; private set; }
 
-        private Pomodoro.Timer timer;
         private GLib.Settings  settings;
+        private Pomodoro.Timer timer;
         private uint           fade_out_timeout_id;
         private bool           ticking_sound_inhibited;
 
         construct
         {
-            unowned string[] args_unowned = null;
-
-            ApplicationExtension.instance = this;
-
-            Gst.init (ref args_unowned);
-
             this.timer = Pomodoro.Timer.get_default ();
 
-            this.settings = Pomodoro.get_settings ().get_child ("preferences");
+            this.settings = new GLib.Settings ("org.gnome.pomodoro.plugins.sounds");
 
             this.setup_ticking_sound ();
             this.setup_pomodoro_end_sound ();
@@ -797,9 +799,13 @@ namespace SoundsPlugin
             this.update_ticking_sound ();
         }
 
-        ~ApplicationExtension ()
+        ~SoundManager ()
         {
             this.timer.state_changed.disconnect (this.on_timer_state_changed);
+            this.timer.notify["is-paused"].disconnect (this.on_timer_is_paused_notify);
+            this.timer.notify["state-duration"].disconnect (this.on_timer_state_duration_notify);
+
+            this.ticking_sound.stop ();
         }
 
         public void inhibit_ticking_sound ()
@@ -889,7 +895,7 @@ namespace SoundsPlugin
         private void setup_pomodoro_end_sound ()
         {
             try {
-                this.pomodoro_end_sound = new SoundsPlugin.CanberraPlayer ();
+                this.pomodoro_end_sound = new SoundsPlugin.CanberraPlayer ("pomodoro-end");
 
                 this.settings.bind_with_mapping ("pomodoro-end-sound",
                                                  this.pomodoro_end_sound,
@@ -913,7 +919,7 @@ namespace SoundsPlugin
         private void setup_pomodoro_start_sound ()
         {
             try {
-                this.pomodoro_start_sound = new SoundsPlugin.CanberraPlayer ();
+                this.pomodoro_start_sound = new SoundsPlugin.CanberraPlayer ("pomodoro-start");
 
                 this.settings.bind_with_mapping ("pomodoro-start-sound",
                                                  this.pomodoro_start_sound,
@@ -1020,6 +1026,37 @@ namespace SoundsPlugin
                     this.pomodoro_end_sound.play ();
                 }
             }
+        }
+
+        public override void dispose ()
+        {
+            this.unschedule_fade_out ();
+
+            base.dispose ();
+        }
+    }
+
+
+    public class ApplicationExtension : Peas.ExtensionBase, Pomodoro.ApplicationExtension
+    {
+        public static unowned ApplicationExtension instance;
+
+        public SoundManager sound_manager;
+
+        construct
+        {
+            unowned string[] args_unowned = null;
+
+            ApplicationExtension.instance = this;
+
+            Gst.init (ref args_unowned);
+
+            this.sound_manager = new SoundManager ();
+        }
+
+        ~ApplicationExtension ()
+        {
+            this.sound_manager.dispose ();
         }
     }
 }

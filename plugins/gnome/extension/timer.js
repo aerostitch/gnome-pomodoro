@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 gnome-pomodoro contributors
+ * Copyright (c) 2014-2016 gnome-pomodoro contributors
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,6 @@ const Main = imports.ui.main;
 const Extension = imports.misc.extensionUtils.getCurrentExtension();
 const Config = Extension.imports.config;
 const DBus = Extension.imports.dbus;
-const Settings = Extension.imports.settings;
 const Utils = Extension.imports.utils;
 
 
@@ -90,14 +89,12 @@ const Timer = new Lang.Class({
         this._connected = true;
 
         this.emit('service-connected');
-        this.emit('state-changed');
         this.emit('update');
     },
 
     _onNameVanished: function() {
         this._connected = false;
 
-        this.emit('state-changed');
         this.emit('update');
         this.emit('service-disconnected');
     },
@@ -233,6 +230,12 @@ const Timer = new Lang.Class({
 
     showPreferences: function(timestamp) {
         this._proxy.ShowPreferencesRemote(timestamp, Lang.bind(this, this._onCallback));
+    },
+
+    quit: function() {
+        this._proxy.QuitRemote(Lang.bind(this, function(result, error) {
+            Utils.disableExtension(Config.EXTENSION_UUID);
+        }));
     },
 
     _notifyServiceNotInstalled: function() {

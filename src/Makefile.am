@@ -6,7 +6,8 @@ gnome_pomodoro_SOURCES = \
 	$(top_builddir)/lib/gnome-pomodoro.vapi
 
 gnome_pomodoro_VALAFLAGS = \
-	$(GNOME_POMODORO_VALAFLAGS)
+	$(GNOME_POMODORO_VALAFLAGS) \
+	--pkg posix
 
 gnome_pomodoro_CPPFLAGS = \
 	$(GNOME_POMODORO_CPPFLAGS) \
@@ -15,8 +16,7 @@ gnome_pomodoro_CPPFLAGS = \
 	-DPACKAGE_DATA_DIR=\""$(pkgdatadir)"\"
 
 gnome_pomodoro_CFLAGS = \
-	$(GNOME_POMODORO_CFLAGS) \
-	$(WARNING_CFLAGS)
+	$(GNOME_POMODORO_CFLAGS)
 
 gnome_pomodoro_LDADD = \
 	$(GNOME_POMODORO_LIBS) \
